@@ -37,7 +37,7 @@
     "https://hooks.slack.com/*"
   ],
   "oauth2": {
-    "client_id": "REPLACE_WITH_YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "779595493138-3qjf0bqgalsqr3i83dch1oqe1sdklsa0.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/drive.file"
     ]
