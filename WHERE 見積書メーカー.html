@@ -912,10 +912,12 @@
     );
   }
 
-  // 出力ファイル名（PDF/CSV共通）
+  // 出力ファイル名（PDF/CSV共通）：【顧客御中】WHERE利用費見積書_YYYYMMDD.ext
   function makeFilename(form, ext) {
     const cust = (form.customer || '株式会社〇〇〇').replace(/[\\/:*?"<>|]/g, '_');
-    return `【${cust}御中】WHERE利用費見積書.${ext}`;
+    const iso = form.issueDate || new Date().toISOString().slice(0, 10);
+    const date = iso.replace(/-/g, ''); // YYYYMMDD
+    return `【${cust}御中】WHERE利用費見積書_${date}.${ext}`;
   }
 
   // PDF Blob 生成（html2pdf を利用）
@@ -984,6 +986,135 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  // ============================================================
+  // Drive 保存先選択モーダル
+  // ============================================================
+  const DRIVE_HISTORY_KEY = 'where_drive_folder_history_v1';
+  function loadDriveHistory() {
+    try {
+      const raw = localStorage.getItem(DRIVE_HISTORY_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function saveDriveHistory(history) {
+    try { localStorage.setItem(DRIVE_HISTORY_KEY, JSON.stringify(history.slice(0, 8))); }
+    catch (e) {}
+  }
+  // Drive のフォルダ URL から ID を抽出
+  function extractFolderId(input) {
+    if (!input) return '';
+    const trimmed = input.trim();
+    // URL 形式: https://drive.google.com/drive/folders/{id}
+    const m = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    // それ以外は ID とみなす（英数字・ハイフン・アンダースコアのみ）
+    if (/^[a-zA-Z0-9_-]+$/.test(trimmed)) return trimmed;
+    return '';
+  }
+
+  function DriveFolderModal({ onConfirm, onCancel }) {
+    const history = loadDriveHistory();
+    const initialFolder = history[0] || { id: '', name: 'マイドライブ直下' };
+    const [input, setInput] = useState(initialFolder.id || '');
+    const [label, setLabel] = useState(initialFolder.name || '');
+    const [skipDrive, setSkipDrive] = useState(false);
+    const [error, setError] = useState('');
+
+    const submit = () => {
+      if (skipDrive) {
+        onConfirm({ skip: true });
+        return;
+      }
+      if (!input.trim()) {
+        // 空 = マイドライブ直下
+        onConfirm({ folderId: '', folderLabel: 'マイドライブ直下' });
+        const newHistory = [{ id: '', name: 'マイドライブ直下' }, ...history.filter(h => h.id !== '')].slice(0, 8);
+        saveDriveHistory(newHistory);
+        return;
+      }
+      const id = extractFolderId(input);
+      if (!id) { setError('フォルダのURLまたはIDを正しく入力してください'); return; }
+      const name = label.trim() || id.slice(0, 12) + '...';
+      const newHistory = [{ id, name }, ...history.filter(h => h.id !== id)].slice(0, 8);
+      saveDriveHistory(newHistory);
+      onConfirm({ folderId: id, folderLabel: name });
+    };
+
+    const pickFromHistory = (h) => {
+      setInput(h.id || '');
+      setLabel(h.name || '');
+      setError('');
+    };
+
+    return (
+      <div className="modal-overlay" style={{position:'fixed', inset:0, zIndex:1000}}>
+        <div className="modal" style={{width: 520}}>
+          <div className="modal-head">
+            <h3>Drive 保存先を選択</h3>
+          </div>
+          <div className="modal-body">
+            <div style={{fontSize:12, color:'var(--muted)'}}>
+              PDFのDrive保存先フォルダを指定してください。空欄の場合は「マイドライブ」直下に保存されます。
+            </div>
+
+            <div className="field">
+              <div className="label"><span>フォルダの URL または ID</span></div>
+              <input className="input" value={input}
+                onChange={e => { setInput(e.target.value); setError(''); }}
+                placeholder="https://drive.google.com/drive/folders/..."
+                disabled={skipDrive}
+                autoFocus />
+              <div className="hint" style={{fontSize:10.5, color:'var(--muted-2)', marginTop:2}}>
+                Drive のフォルダを開いて、ブラウザの URL バーをコピー&貼付
+              </div>
+            </div>
+
+            <div className="field">
+              <div className="label"><span>表示名（任意）</span></div>
+              <input className="input" value={label}
+                onChange={e => setLabel(e.target.value)}
+                placeholder="例: 顧客A / 2026年Q2"
+                disabled={skipDrive} />
+            </div>
+
+            <button type="button" className="btn"
+              style={{justifySelf:'start'}}
+              onClick={() => window.open('https://drive.google.com/drive/my-drive', '_blank')}>
+              Driveを開く（フォルダURLをコピー）
+            </button>
+
+            {history.length > 0 && (
+              <div>
+                <div style={{fontSize:11, color:'var(--muted)', margin:'8px 0 4px 0'}}>履歴</div>
+                <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
+                  {history.map((h, i) => (
+                    <button key={i} type="button" className="btn"
+                      style={{height:24, fontSize:11, padding:'0 8px'}}
+                      onClick={() => pickFromHistory(h)}>
+                      {h.name || (h.id ? h.id.slice(0, 12)+'...' : 'マイドライブ直下')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <label className="checkbox" style={{marginTop:6}}>
+              <input type="checkbox" checked={skipDrive}
+                onChange={e => setSkipDrive(e.target.checked)} />
+              Drive 保存をスキップ（メール添付のみ）
+            </label>
+
+            {error && <div style={{color:'#b91c1c', fontSize:12}}>{error}</div>}
+          </div>
+          <div className="modal-foot">
+            <button className="btn" onClick={onCancel}>キャンセル</button>
+            <button className="btn btn-primary" onClick={submit}>この場所で確定</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ============================================================
@@ -1202,13 +1333,16 @@
       catch (e) { flash('出力に失敗しました'); }
     };
 
-    // 拡張機能連携：完了 → メールに添付・Drive保存・Slack投稿
-    const onComplete = async () => {
+    // 完了フロー：保存先選択モーダル → PDF生成 → 拡張に通知
+    const [showDriveModal, setShowDriveModal] = useState(false);
+    const onComplete = () => setShowDriveModal(true);
+
+    const finalize = async (driveChoice) => {
+      setShowDriveModal(false);
       setBusy('PDFを生成中...');
       try {
         const blob = await generatePdfBlob(form);
         const filename = makeFilename(form, 'pdf');
-        // PDF を ArrayBuffer → base64 化
         const buf = await blob.arrayBuffer();
         let bin = '';
         const bytes = new Uint8Array(buf);
@@ -1221,6 +1355,7 @@
           filename,
           base64,
           mime: 'application/pdf',
+          drive: driveChoice, // { skip: true } or { folderId, folderLabel }
           form: {
             customer: form.customer,
             subject: form.subject,
@@ -1229,13 +1364,11 @@
             grand: D.subTotal(D.buildLines(form)) + D.tax(D.subTotal(D.buildLines(form)))
           }
         };
-        // 拡張機能の content-script に postMessage で渡す
         window.postMessage(payload, '*');
-        // 親ウィンドウ（拡張機能がオープナーの場合）にも通知
         if (window.opener && !window.opener.closed) {
           try { window.opener.postMessage(payload, '*'); } catch (e) {}
         }
-        flash('メールに添付しました。Drive/Slack 連携も実行されます。');
+        flash('メールに送信しました');
       } catch (e) {
         console.error(e);
         flash('処理に失敗しました');
@@ -1281,6 +1414,11 @@
         </div>
         {busy && <div className="toast">{busy}</div>}
         {!busy && toast && <div className="toast">{toast}</div>}
+        {showDriveModal && (
+          <DriveFolderModal
+            onConfirm={finalize}
+            onCancel={() => setShowDriveModal(false)} />
+        )}
       </div>
     );
   }

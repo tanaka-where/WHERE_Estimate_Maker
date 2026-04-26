@@ -141,7 +141,7 @@
   // 完了処理：PDF を compose に添付 + Drive保存
   // -----------------------------------------------------------------
   async function handleCompletion(payload, composeEl) {
-    const { filename, base64, mime, form } = payload;
+    const { filename, base64, mime, form, drive } = payload;
     const bin = atob(base64);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -164,17 +164,28 @@
     }
 
     chrome.storage.local.get(['enableDrive', 'enableSlack', 'slackWebhook', 'driveFolder'], async (cfg) => {
-      if (cfg.enableDrive) {
+      // 保存先決定の優先順位: payload の drive > 拡張機能設定
+      let folderId = '';
+      let driveSkipped = false;
+      if (drive) {
+        if (drive.skip) driveSkipped = true;
+        else folderId = drive.folderId || '';
+      } else {
+        folderId = cfg.driveFolder || '';
+      }
+      const driveEnabled = !driveSkipped && (drive ? true : cfg.enableDrive);
+      if (driveEnabled) {
         chrome.runtime.sendMessage({
           type: 'SAVE_TO_DRIVE',
-          filename, base64, mime, folderId: cfg.driveFolder || ''
+          filename, base64, mime, folderId
         }, (resp) => {
           if (resp?.ok) {
             const link = resp.webViewLink;
+            const where = drive?.folderLabel || (folderId ? '指定フォルダ' : 'マイドライブ直下');
             if (link) {
-              showToastLink('Driveに保存しました：開く', link, 8000);
+              showToastLink(`Driveに保存しました（${where}）：開く`, link, 8000);
             } else {
-              showToast('Driveに保存しました');
+              showToast(`Driveに保存しました（${where}）`);
             }
           } else if (resp?.error) {
             showToast('Drive保存失敗: ' + resp.error, 6000);
