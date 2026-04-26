@@ -47,13 +47,13 @@ Google Fonts と CDN（React / Babel / html2pdf.js）の取得にネット接続
 
 ```bash
 # このリポジトリを GitHub にプッシュ
-git remote add origin git@github.com:YOUR_ORG/WHERE_Estimate_Maker.git
+git remote add origin git@github.com:tanaka-where/WHERE_Estimate_Maker.git
 git push -u origin main
 
 # Settings → Pages → main / root を有効化
 ```
 
-公開URL: `https://YOUR_ORG.github.io/WHERE_Estimate_Maker/WHERE%20見積書メーカー.html`
+公開URL: `https://tanaka-where.github.io/WHERE_Estimate_Maker/WHERE%20見積書メーカー.html`
 
 GitHub Pages にデプロイすると `variables.json` も同じドメインから配信されるため
 fetch が成功し、変数の更新がページリロードで全ユーザーに反映される。

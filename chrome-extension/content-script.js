@@ -64,7 +64,7 @@
   function openEditor(composeId, recipient, composeEl) {
     chrome.storage.local.get(['editorUrl'], (cfg) => {
       const url = cfg.editorUrl ||
-        'https://[YOUR-GITHUB-USER].github.io/WHERE_Estimate_Maker/WHERE%20%E8%A6%8B%E7%A9%8D%E6%9B%B8%E3%83%A1%E3%83%BC%E3%82%AB%E3%83%BC.html';
+        'https://tanaka-where.github.io/WHERE_Estimate_Maker/WHERE%20%E8%A6%8B%E7%A9%8D%E6%9B%B8%E3%83%A1%E3%83%BC%E3%82%AB%E3%83%BC.html';
       const u = new URL(url);
       u.searchParams.set('source', 'gmail-extension');
       u.searchParams.set('composeId', composeId);
