@@ -148,9 +148,14 @@
     const blob = new Blob([bytes], { type: mime });
     const file = new File([blob], filename, { type: mime });
 
-    const attached = attachToCompose(composeEl, file);
-    showToast(attached ? 'PDFを添付しました' : '添付に失敗 — ダウンロードしました');
-    if (!attached) {
+    const attachResult = attachToCompose(composeEl, file);
+    log('attach result:', attachResult);
+
+    if (attachResult.success) {
+      showToast(`PDFを添付しました（${attachResult.method}）`);
+    } else {
+      // フォールバック: ダウンロードして手動添付を促す
+      showToast('自動添付に失敗 — PDFをダウンロードしたので手動で添付してください', 6000);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = filename;
@@ -164,8 +169,16 @@
           type: 'SAVE_TO_DRIVE',
           filename, base64, mime, folderId: cfg.driveFolder || ''
         }, (resp) => {
-          if (resp?.ok) showToast('Driveに保存しました');
-          else if (resp?.error) showToast('Drive保存失敗: ' + resp.error);
+          if (resp?.ok) {
+            const link = resp.webViewLink;
+            if (link) {
+              showToastLink('Driveに保存しました：開く', link, 8000);
+            } else {
+              showToast('Driveに保存しました');
+            }
+          } else if (resp?.error) {
+            showToast('Drive保存失敗: ' + resp.error, 6000);
+          }
         });
       }
       if (cfg.enableSlack && cfg.slackWebhook) {
@@ -181,20 +194,86 @@
     });
   }
 
+  /**
+   * compose に file を添付する。複数の手法を順に試行する。
+   * @returns {{success: boolean, method?: string, errors?: any[]}}
+   */
   function attachToCompose(composeEl, file) {
+    const errors = [];
+
+    // ===== 手法 A: compose 内の input[type=file] にセット =====
     try {
-      const target = composeEl.querySelector('[contenteditable="true"]') || composeEl;
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
-      return true;
+      const inputs = composeEl.querySelectorAll('input[type="file"]');
+      log('compose内のinput[type=file]を発見:', inputs.length);
+      for (const input of inputs) {
+        try {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          log('input[type=file]に添付', input);
+          return { success: true, method: 'file-input' };
+        } catch (e) {
+          errors.push({ method: 'file-input', error: String(e) });
+        }
+      }
     } catch (e) {
-      console.error(LOG_PREFIX, 'attach failed', e);
-      return false;
+      errors.push({ method: 'file-input-scan', error: String(e) });
     }
+
+    // ===== 手法 B: ドキュメント全体の input[type=file] にセット（Gmail はオフスクリーンに置く場合あり） =====
+    try {
+      const inputs = document.querySelectorAll('input[type="file"]');
+      log('全documentのinput[type=file]:', inputs.length);
+      for (const input of inputs) {
+        try {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          log('global input[type=file]に添付', input);
+          return { success: true, method: 'global-file-input' };
+        } catch (e) {
+          errors.push({ method: 'global-file-input', error: String(e) });
+        }
+      }
+    } catch (e) {
+      errors.push({ method: 'global-file-input-scan', error: String(e) });
+    }
+
+    // ===== 手法 C: drop イベントを compose の本文エリアに dispatch =====
+    try {
+      const targets = [
+        composeEl.querySelector('[contenteditable="true"]'),
+        composeEl.querySelector('[g_editable="true"]'),
+        composeEl
+      ].filter(Boolean);
+      for (const target of targets) {
+        try {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          // 完全な drag シーケンスを発火
+          ['dragenter', 'dragover', 'drop'].forEach(type => {
+            target.dispatchEvent(new DragEvent(type, {
+              bubbles: true, cancelable: true, dataTransfer: dt
+            }));
+          });
+          log('drop sequence dispatched', target);
+          // 注: drop イベントは成功検知できないので、ベストエフォート
+          return { success: true, method: 'drop-event' };
+        } catch (e) {
+          errors.push({ method: 'drop-event', error: String(e) });
+        }
+      }
+    } catch (e) {
+      errors.push({ method: 'drop-scan', error: String(e) });
+    }
+
+    log('all attach methods failed', errors);
+    return { success: false, errors };
   }
 
-  function showToast(msg) {
+  function showToast(msg, ms = 3000) {
     const t = document.createElement('div');
     t.textContent = msg;
     t.style.cssText = `
@@ -204,9 +283,34 @@
       padding: 10px 18px; border-radius: 999px;
       font: 12px 'Noto Sans JP'; z-index: 99999;
       box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      max-width: 80%; text-align: center;
     `;
     document.body.appendChild(t);
-    setTimeout(() => { t.remove(); }, 3000);
+    setTimeout(() => { t.remove(); }, ms);
+  }
+  function showToastLink(msg, href, ms = 6000) {
+    const t = document.createElement('div');
+    t.style.cssText = `
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%);
+      background: #0a0a0a; color: #fff;
+      padding: 10px 18px; border-radius: 999px;
+      font: 12px 'Noto Sans JP'; z-index: 99999;
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      max-width: 80%; display: flex; gap: 12px; align-items: center;
+    `;
+    const span = document.createElement('span');
+    span.textContent = msg.split('：')[0];
+    const a = document.createElement('a');
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.style.cssText = 'color:#7dd3fc; text-decoration: underline; cursor: pointer;';
+    a.textContent = msg.split('：')[1] || 'Driveで開く';
+    t.appendChild(span);
+    t.appendChild(a);
+    document.body.appendChild(t);
+    setTimeout(() => { t.remove(); }, ms);
   }
 
   // -----------------------------------------------------------------
