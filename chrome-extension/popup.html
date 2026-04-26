@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>WHERE 見積書メーカー — 設定</title>
+  <style>
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      width: 360px; margin: 0; padding: 16px;
+      font-size: 12px; color: #0a0a0a;
+    }
+    h1 { font-size: 14px; margin: 0 0 12px 0; }
+    h2 { font-size: 12px; margin: 14px 0 6px 0; color: #525252; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+    label { display: block; margin: 8px 0 2px 0; font-weight: 500; color: #525252; font-size: 11px; }
+    input[type=text], input[type=url] {
+      width: 100%; box-sizing: border-box;
+      padding: 6px 8px; border: 1px solid #d4d4d8;
+      border-radius: 4px; font-size: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+    .row input[type=checkbox] { margin: 0; }
+    button {
+      background: #1e3a8a; color: #fff; border: 0;
+      padding: 8px 14px; border-radius: 4px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      width: 100%; margin-top: 12px;
+    }
+    button:hover { background: #1e40af; }
+    .hint { font-size: 10.5px; color: #737373; margin-top: 2px; }
+    .status { font-size: 11px; color: #166534; margin-top: 8px; min-height: 14px; }
+    .err { color: #b91c1c; }
+    a { color: #1e3a8a; }
+  </style>
+</head>
+<body>
+  <h1>WHERE 見積書メーカー — 設定</h1>
+
+  <h2>エディタ URL</h2>
+  <label>見積書メーカーのホスティングURL</label>
+  <input type="url" id="editorUrl" placeholder="https://example.github.io/WHERE_Estimate_Maker/WHERE%20%E8%A6%8B%E7%A9%8D%E6%9B%B8%E3%83%A1%E3%83%BC%E3%82%AB%E3%83%BC.html">
+  <div class="hint">GitHub Pages 等にホスティングした URL を指定。空の場合は manifest 内のデフォルト URL が使用されます。</div>
+
+  <h2>Google Drive</h2>
+  <div class="row">
+    <input type="checkbox" id="enableDrive">
+    <label for="enableDrive" style="margin: 0">PDF を Drive に自動保存する</label>
+  </div>
+  <label>保存先フォルダ ID（任意）</label>
+  <input type="text" id="driveFolder" placeholder="例: 1AbCdE...（マイドライブ直下なら空欄）">
+  <div class="hint">Drive のフォルダURLの末尾の文字列。manifest.json の <code>oauth2.client_id</code> 設定が必要です。</div>
+
+  <h2>Slack</h2>
+  <div class="row">
+    <input type="checkbox" id="enableSlack">
+    <label for="enableSlack" style="margin: 0">Slack に通知する</label>
+  </div>
+  <label>Incoming Webhook URL</label>
+  <input type="url" id="slackWebhook" placeholder="https://hooks.slack.com/services/...">
+  <div class="hint">投稿先チャンネルは Webhook 作成時に設定します。</div>
+
+  <button id="save">設定を保存</button>
+  <div id="status" class="status"></div>
+
+  <h2>ヘルプ</h2>
+  <ul style="font-size:11px; color:#525252; padding-left:18px; line-height:1.6">
+    <li>使い方: Gmail でメール作成 → ツールバーの「WHERE 見積書を作成」ボタン</li>
+    <li>算出ロジック: 見積書メーカー右上の「算出ロジック」リンク</li>
+    <li>変数の修正: GitHub の <code>variables.json</code> を PR で更新</li>
+  </ul>
+
+  <script src="popup.js"></script>
+</body>
+</html>

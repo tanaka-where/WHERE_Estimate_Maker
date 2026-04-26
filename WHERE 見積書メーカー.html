@@ -1,0 +1,1334 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>WHERE 見積書メーカー</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+  <script src="https://unpkg.com/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
+</head>
+<body class="standalone">
+  <div id="root"></div>
+
+  <!-- ============================================================ -->
+  <!-- data layer (data.js inline) — variables.json優先・フォールバック内蔵 -->
+  <!-- ============================================================ -->
+  <script>
+  // 起動時に variables.json を同期で取れないため、
+  // window.WHERE_VARS_PROMISE で fetch を非同期実行し、
+  // データ層は最初フォールバックで初期化、Promise 完了で更新する。
+  window.WHERE_VARS_PROMISE = (async () => {
+    try {
+      const res = await fetch('variables.json', { cache: 'no-cache' });
+      if (res.ok) return await res.json();
+    } catch (e) { /* fallback */ }
+    return null;
+  })();
+
+  window.WHERE_DATA = (() => {
+    const FALLBACK_PLANS = [
+      { id: 'id',          name: 'IDプラン',                  monthly: 100000, target: '従量', overage: 200,  meta: 'ターゲット数：従量 / 超過 ¥200/カウント' },
+      { id: 'trial',       name: 'トライアルプラン',          monthly: 300000, target: 250,    overage: 1200, meta: '最大 250 / 超過 ¥1,200/カウント' },
+      { id: 'entry',       name: 'エントリプラン',            monthly: 400000, target: 333,    overage: 1100, meta: '最大 333 / 超過 ¥1,100/カウント' },
+      { id: 'standard',    name: 'スタンダードプラン',        monthly: 500000, target: 500,    overage: 1000, meta: '最大 500 / 超過 ¥1,000/カウント' },
+      { id: 'advance',     name: 'アドバンスプラン',          monthly: 700000, target: 1000,   overage: 700,  meta: '最大 1,000 / 超過 ¥700/カウント' },
+      { id: 'pro',         name: 'プロフェッショナルプラン',  monthly: 1000000, target: 1700,  overage: 600,  meta: '最大 1,700 / 超過 ¥600/カウント' },
+      { id: 'specialist',  name: 'スペシャリストプラン',      monthly: 1500000, target: 2800,  overage: 550,  meta: '最大 2,800 / 超過 ¥550/カウント' },
+      { id: 'expert',      name: 'エキスパートプラン',        monthly: 2000000, target: 4000,  overage: 500,  meta: '最大 4,000 / 超過 ¥500/カウント' },
+      { id: 'scale',       name: 'スケールプラン',            monthly: 3000000, target: 7500,  overage: 400,  meta: '最大 7,500 / 超過 ¥400/カウント' },
+      { id: 'enterprise',  name: 'エンタープライズプラン',    monthly: 4000000, target: 13500, overage: 300,  meta: '最大 13,500 / 超過 ¥300/カウント' },
+    ];
+
+    const FALLBACK_DM_PLANS = [
+      { id: 'basic',    name: 'ベーシック',  unit: 330, meta: '¥330/通' },
+      { id: 'standard', name: 'スタンダード', unit: 460, meta: '¥460/通' },
+      { id: 'premium',  name: 'プレミアム',   unit: 620, meta: '¥620/通' },
+    ];
+
+    const FALLBACK_REPS = [
+      '阿部 文哉','大多和 奈岐','落合 健太','鎌田 紗耶加','金子 莉奈',
+      '境 健太','佐藤 瞭','鈴木 優仁子','須藤 大貴','高野 智樹',
+      '野出 貴代','萩原 稲一郎','藤井 富実矢','村山 知輝','山本 哲郎',
+      '渡辺 悠太','関根 ゆたか','田續 陸','宮城 りな'
+    ];
+
+    const FALLBACK_SUBJECTS = [
+      'WHERE利用費',
+      'WHERE利用費 / DM費用',
+      'WHERE利用費 / DM費用 / 反響対応費用',
+    ];
+
+    // 動的に上書き可能な参照（variables.json マージ後に再代入される）
+    let PLANS = FALLBACK_PLANS;
+    let DM_PLANS = FALLBACK_DM_PLANS;
+    let REPS = FALLBACK_REPS;
+    let SUBJECTS = FALLBACK_SUBJECTS;
+    let VENDOR = {
+      company: '株式会社WHERE',
+      address1: '東京都文京区湯島四丁目1番16号',
+      address2: 'Gate Cross HONGO 7階',
+      registrationNumber: 'T1010001224810'
+    };
+    let DESIGN_FEE_PER_SIDE = 50000;
+    let TAX_RATE = 0.10;
+    let ONBOARDING_MULT = 2.5;
+    let CONFIG_VERSION = 'fallback';
+
+    const todayISO = () => {
+      const d = new Date();
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+    };
+    const addDaysISO = (iso, days) => {
+      const d = new Date(iso); d.setDate(d.getDate() + days);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+    };
+
+    const defaultForm = (preset = 'where_dm') => ({
+      customer: '',
+      subject: preset === 'where' ? SUBJECTS[0] : preset === 'where_dm_call' ? SUBJECTS[2] : SUBJECTS[1],
+      startDate: todayISO(),
+      endDate:   addDaysISO(todayISO(), 365),
+      issueDate: todayISO(),
+      expireDate:addDaysISO(todayISO(), 30),
+      rep: REPS[0],
+      months: 12,
+      industry: '不動産',
+      onboarding: { include: true, amount: 1500000, qty: 1 },
+      license:    { plan: 'standard', monthly: 500000, months: 12, special: false },
+      dm: {
+        include: preset !== 'where',
+        plan: 'standard',
+        monthlyCount: 300,
+        maxItems: 4,
+        designSides: 2,
+      },
+      inquiry: {
+        include: preset === 'where_dm_call',
+        monthly: 85000,
+        setup: 45000,
+        monthlyCap: 50,
+      },
+      registry: { included: 100, overage: 500 },
+      note: '',
+      customRows: [],
+      deviated: false,
+    });
+
+    const fmt = (n) => {
+      if (n === 0 || n == null || isNaN(n)) return '-';
+      return Number(n).toLocaleString('en-US');
+    };
+    const fmtY = (n) => {
+      if (n === 0 || n == null || isNaN(n)) return '¥-';
+      return '¥' + Number(n).toLocaleString('en-US');
+    };
+
+    function buildLines(f) {
+      const lines = [];
+      let group = 1;
+
+      if (f.onboarding.include) {
+        lines.push({
+          id: 'g-onb', kind: 'group', no: group++,
+          label: `${group-1}) WHERE導入支援費用`,
+          qty: f.onboarding.qty, unit: '式',
+          price: f.onboarding.amount, total: f.onboarding.amount * f.onboarding.qty,
+          source: 'onboarding',
+        });
+        lines.push({ id: 'd-onb-1', kind: 'detail', label: '– 初期設定・活用設計 / アカウント開設・初回オンボーディング', source: 'onboarding' });
+        lines.push({ id: 'd-onb-2', kind: 'detail', label: '– 運用ガイド / 業界別テンプレート提供（不動産・再エネ）', source: 'onboarding' });
+      }
+
+      if (f.license) {
+        const plan = PLANS.find(p => p.id === f.license.plan) || PLANS[0];
+        const total = (f.license.monthly || 0) * (f.license.months || 0);
+        const labelPlan = f.license.special ? '特別プラン' : plan.name;
+        lines.push({
+          id: 'g-lic', kind: 'group', no: group++,
+          label: `${group-1}) WHEREライセンス費用`,
+          qty: f.license.months, unit: 'ヶ月',
+          price: f.license.monthly, total,
+          source: 'license',
+        });
+        lines.push({ id: 'd-lic-1', kind: 'detail', label: `– ${labelPlan}（候補地探索 / オーナー名寄せ / リスト出力）`, source: 'license' });
+        lines.push({ id: 'd-lic-2', kind: 'detail', label: `– ターゲット数 上限：${plan.target === '従量' ? '従量制' : plan.target.toLocaleString() + '件'} / 超過単価 ¥${plan.overage}/カウント`, source: 'license' });
+      }
+
+      if (f.dm.include) {
+        const dm = DM_PLANS.find(p => p.id === f.dm.plan) || DM_PLANS[0];
+        const monthlyDM = dm.unit * f.dm.monthlyCount;
+        const designFee = (f.dm.designSides || 0) * 50000;
+        const totalDM = monthlyDM * f.months;
+        lines.push({
+          id: 'g-dm', kind: 'group', no: group++,
+          label: `${group-1}) DM費用`,
+          qty: f.months, unit: 'ヶ月',
+          price: monthlyDM, total: totalDM,
+          source: 'dm',
+        });
+        lines.push({ id: 'd-dm-1', kind: 'detail', label: `– ${dm.name}DM / 月間 ${f.dm.monthlyCount.toLocaleString()}通 × @¥${dm.unit}`, source: 'dm' });
+        lines.push({ id: 'd-dm-2', kind: 'detail', label: `– 封入点数 最大 ${f.dm.maxItems}点 / 反響QR・効果計測タグ付与`, source: 'dm' });
+        if (designFee > 0) {
+          lines.push({
+            id: 'g-dm-design', kind: 'group', no: group++,
+            label: `${group-1}) DMデザイン構成費`,
+            qty: f.dm.designSides, unit: '面',
+            price: 50000, total: designFee,
+            source: 'dm',
+          });
+          lines.push({ id: 'd-dm-design-1', kind: 'detail', label: '– 各面ごとのレイアウト設計・初稿制作・1回までの修正対応含む', source: 'dm' });
+        }
+      }
+
+      if (f.inquiry.include) {
+        const monthly = f.inquiry.monthly * f.months;
+        lines.push({
+          id: 'g-inq', kind: 'group', no: group++,
+          label: `${group-1}) 反響対応費用`,
+          qty: f.months, unit: 'ヶ月',
+          price: f.inquiry.monthly, total: monthly,
+          source: 'inquiry',
+        });
+        lines.push({ id: 'd-inq-1', kind: 'detail', label: `– 一次受電・着信対応・ヒアリング代行（月間 上限 ${f.inquiry.monthlyCap} 件）`, source: 'inquiry' });
+        lines.push({
+          id: 'g-inq-setup', kind: 'group', no: group++,
+          label: `${group-1}) 反響対応 初期費用`,
+          qty: 1, unit: '式',
+          price: f.inquiry.setup, total: f.inquiry.setup,
+          source: 'inquiry',
+        });
+        lines.push({ id: 'd-inq-setup-1', kind: 'detail', label: '– 専用回線設置 / 受電スクリプト作成 / オペレータ研修', source: 'inquiry' });
+      }
+
+      for (const r of f.customRows) {
+        lines.push({
+          id: r.id, kind: 'group', no: group++,
+          label: `${group-1}) ${r.label || '（新規項目）'}`,
+          qty: r.qty || 1, unit: r.unit || '式',
+          price: r.price || 0, total: (r.qty || 1) * (r.price || 0),
+          source: 'custom',
+        });
+      }
+
+      return lines;
+    }
+
+    function subTotal(lines) {
+      return lines.filter(l => l.kind === 'group').reduce((s, l) => s + (l.total || 0), 0);
+    }
+    function tax(s) { return Math.floor(s * TAX_RATE); }
+
+    function sectionSubtotal(f, key) {
+      if (key === 'onboarding') return f.onboarding.include ? f.onboarding.amount * f.onboarding.qty : 0;
+      if (key === 'license')    return (f.license.monthly || 0) * (f.license.months || 0);
+      if (key === 'dm') {
+        if (!f.dm.include) return 0;
+        const dm = DM_PLANS.find(p => p.id === f.dm.plan) || DM_PLANS[0];
+        return dm.unit * f.dm.monthlyCount * f.months + (f.dm.designSides || 0) * DESIGN_FEE_PER_SIDE;
+      }
+      if (key === 'inquiry')    return f.inquiry.include ? f.inquiry.monthly * f.months + f.inquiry.setup : 0;
+      if (key === 'custom')     return f.customRows.reduce((s, r) => s + (r.qty || 1) * (r.price || 0), 0);
+      return 0;
+    }
+
+    /**
+     * 導入支援費用の推奨値を算出する。
+     * 月額固定費（ライセンス + DM月額 + 反響対応月額）合計の onboarding.multiplierMonths（既定 2.5）ヶ月分。
+     * @returns {number} 円（整数）
+     */
+    function recommendedOnboarding(f) {
+      const licenseMonthly = (f.license && f.license.monthly) || 0;
+      let dmMonthly = 0;
+      if (f.dm && f.dm.include) {
+        const dm = DM_PLANS.find(p => p.id === f.dm.plan) || DM_PLANS[0];
+        dmMonthly = (dm.unit || 0) * (f.dm.monthlyCount || 0);
+      }
+      const inquiryMonthly = (f.inquiry && f.inquiry.include) ? (f.inquiry.monthly || 0) : 0;
+      const sumMonthly = licenseMonthly + dmMonthly + inquiryMonthly;
+      return Math.round(sumMonthly * ONBOARDING_MULT);
+    }
+
+    /** variables.json で取得した値を反映する */
+    function applyVariables(v) {
+      if (!v) return;
+      if (Array.isArray(v.plans) && v.plans.length)     PLANS = v.plans;
+      if (Array.isArray(v.dmPlans) && v.dmPlans.length) DM_PLANS = v.dmPlans;
+      if (Array.isArray(v.reps) && v.reps.length)       REPS = v.reps;
+      if (Array.isArray(v.subjects) && v.subjects.length) SUBJECTS = v.subjects;
+      if (v.vendor) VENDOR = { ...VENDOR, ...v.vendor };
+      if (typeof v.designFeePerSide === 'number') DESIGN_FEE_PER_SIDE = v.designFeePerSide;
+      if (v.tax && typeof v.tax.rate === 'number') TAX_RATE = v.tax.rate;
+      if (v.onboarding && typeof v.onboarding.multiplierMonths === 'number') {
+        ONBOARDING_MULT = v.onboarding.multiplierMonths;
+      }
+      if (v.version) CONFIG_VERSION = v.version;
+    }
+
+    return {
+      get PLANS()    { return PLANS; },
+      get DM_PLANS() { return DM_PLANS; },
+      get REPS()     { return REPS; },
+      get SUBJECTS() { return SUBJECTS; },
+      get VENDOR()   { return VENDOR; },
+      get TAX_RATE() { return TAX_RATE; },
+      get ONBOARDING_MULT() { return ONBOARDING_MULT; },
+      get CONFIG_VERSION() { return CONFIG_VERSION; },
+      get DESIGN_FEE_PER_SIDE() { return DESIGN_FEE_PER_SIDE; },
+      defaultForm, buildLines, subTotal, tax, fmt, fmtY, sectionSubtotal,
+      recommendedOnboarding, applyVariables
+    };
+  })();
+  </script>
+
+  <!-- ============================================================ -->
+  <!-- Sidebar (sidebar.jsx inline)                                 -->
+  <!-- ============================================================ -->
+  <script type="text/babel">
+  /* eslint-disable */
+  (function(){
+  const { useState, useMemo, useRef } = React;
+
+  const Chev = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 6 15 12 9 18"/></svg>
+  );
+  const SearchIco = () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+  );
+
+  function Accordion({ num, title, pill, subtotal, openId, setOpen, id, muted, children }) {
+    const open = openId === id;
+    return (
+      <div className={`acc ${open ? 'open' : ''} ${muted ? 'muted' : ''}`}>
+        <div className="acc-head" onClick={() => setOpen(open ? null : id)}>
+          <div className="acc-num">{num}</div>
+          <div className="acc-title">
+            {title}
+            {pill && <span className={`pill pill-${pill.kind}`}>{pill.text}</span>}
+          </div>
+          <div className={`acc-subtotal ${subtotal === 0 || subtotal == null ? 'zero' : ''}`}>
+            {subtotal == null ? '' : (subtotal === 0 ? '—' : '¥' + subtotal.toLocaleString('en-US'))}
+          </div>
+          <div className="acc-chev"><Chev /></div>
+        </div>
+        {open && <div className="acc-body">{children}</div>}
+      </div>
+    );
+  }
+
+  function Toggle({ on, onChange, label, desc }) {
+    return (
+      <div className="toggle-row">
+        <div>
+          <div className="lbl">{label}</div>
+          {desc && <div className="desc">{desc}</div>}
+        </div>
+        <div className={`toggle ${on ? 'on' : ''}`} onClick={() => onChange(!on)} />
+      </div>
+    );
+  }
+
+  function Field({ label, hint, children }) {
+    return (
+      <div className="field">
+        <div className="label">
+          <span>{label}</span>
+          {hint && <span className="hint">{hint}</span>}
+        </div>
+        {children}
+      </div>
+    );
+  }
+
+  function Sidebar({ form, setForm, openSection, setOpenSection }) {
+    const D = window.WHERE_DATA;
+    const set = (path, v) => {
+      setForm(prev => {
+        const next = { ...prev };
+        const parts = path.split('.');
+        let o = next;
+        for (let i = 0; i < parts.length - 1; i++) {
+          o[parts[i]] = { ...o[parts[i]] };
+          o = o[parts[i]];
+        }
+        o[parts[parts.length - 1]] = v;
+        return next;
+      });
+    };
+
+    const sub = (k) => D.sectionSubtotal(form, k);
+
+    return (
+      <aside className="sidebar">
+        <div className="sidebar-head">
+          <div className="sb-tabbar">
+            <div className="sb-tab active">入力</div>
+          </div>
+        </div>
+
+        <div className="sidebar-body scroll-thin">
+          <Accordion num="1" id="customer" openId={openSection} setOpen={setOpenSection}
+                     title="顧客情報" subtotal={null}>
+            <Field label="顧客名">
+              <input className="input" value={form.customer} onChange={e => set('customer', e.target.value)} placeholder="株式会社○○" />
+            </Field>
+            <Field label="件名" hint="プリセット選択で行構成が変わります">
+              <select className="select" value={form.subject} onChange={e => set('subject', e.target.value)}>
+                {D.SUBJECTS.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </Field>
+            <div className="field-row">
+              <Field label="ご利用期間 開始">
+                <input type="date" className="input" value={form.startDate} onChange={e => set('startDate', e.target.value)} />
+              </Field>
+              <Field label="ご利用期間 終了">
+                <input type="date" className="input" value={form.endDate} onChange={e => set('endDate', e.target.value)} />
+              </Field>
+            </div>
+            <div className="field-row">
+              <Field label="発行日">
+                <input type="date" className="input" value={form.issueDate} onChange={e => set('issueDate', e.target.value)} />
+              </Field>
+              <Field label="有効期限">
+                <input type="date" className="input" value={form.expireDate} onChange={e => set('expireDate', e.target.value)} />
+              </Field>
+            </div>
+            <Field label="営業担当者">
+              <select className="select" value={form.rep} onChange={e => set('rep', e.target.value)}>
+                {D.REPS.map(r => <option key={r}>{r}</option>)}
+              </select>
+            </Field>
+          </Accordion>
+
+          <Accordion num="2" id="contract" openId={openSection} setOpen={setOpenSection}
+                     title="契約条件" subtotal={null}>
+            <Field label="契約期間">
+              <select className="select" value={form.months} onChange={e => set('months', Number(e.target.value))}>
+                {Array.from({length: 36}, (_, i) => i + 1).map(m => <option key={m} value={m}>{m} ヶ月</option>)}
+              </select>
+            </Field>
+            <Field label="業種">
+              <div className="radio">
+                <div className={form.industry === '不動産' ? 'active' : ''} onClick={() => set('industry', '不動産')}>不動産</div>
+                <div className={form.industry === '再エネ' ? 'active' : ''} onClick={() => set('industry', '再エネ')}>再エネ</div>
+              </div>
+            </Field>
+          </Accordion>
+
+          <Accordion num="3" id="onboarding" openId={openSection} setOpen={setOpenSection}
+                     title="WHERE導入支援費用"
+                     pill={{ kind: form.onboarding.include ? 'on' : 'off', text: form.onboarding.include ? '含める' : 'スキップ' }}
+                     subtotal={sub('onboarding')}>
+            <Toggle on={form.onboarding.include} onChange={v => set('onboarding.include', v)}
+                    label="初期費用を含める" desc="ライセンス月額 ×2.5 で自動算出" />
+            <div className="field-row">
+              <Field label="金額" hint="編集可">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.onboarding.amount}
+                         onChange={e => set('onboarding.amount', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">円</span>
+                </div>
+              </Field>
+              <Field label="数量">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.onboarding.qty}
+                         onChange={e => set('onboarding.qty', Number(e.target.value) || 1)} />
+                  <span className="input-suffix">式</span>
+                </div>
+              </Field>
+            </div>
+          </Accordion>
+
+          <Accordion num="4" id="license" openId={openSection} setOpen={setOpenSection}
+                     title="WHEREライセンス費用"
+                     pill={{ kind: 'on', text: '必須' }}
+                     subtotal={sub('license')}>
+            <Field label="プラン">
+              <div className="plan-list scroll-thin">
+                {D.PLANS.map(p => (
+                  <div key={p.id}
+                       className={`plan-row ${form.license.plan === p.id ? 'active' : ''}`}
+                       onClick={() => { set('license.plan', p.id); set('license.monthly', p.monthly); }}>
+                    <div>
+                      <div className="name">{p.name}</div>
+                      <div className="meta">{p.meta}</div>
+                    </div>
+                    <div className="price">¥{p.monthly.toLocaleString('en-US')}<span style={{fontSize:9, color:'var(--muted-2)', fontWeight:400}}>/月</span></div>
+                  </div>
+                ))}
+              </div>
+            </Field>
+            <div className="field-row">
+              <Field label="月額単価" hint="特別プラン用に編集可">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.license.monthly}
+                         onChange={e => set('license.monthly', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">円</span>
+                </div>
+              </Field>
+              <Field label="期間">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.license.months}
+                         onChange={e => set('license.months', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">ヶ月</span>
+                </div>
+              </Field>
+            </div>
+            <label className="checkbox">
+              <input type="checkbox" checked={form.license.special} onChange={e => set('license.special', e.target.checked)} />
+              「特別プラン」表記を有効にする
+            </label>
+          </Accordion>
+
+          <Accordion num="5" id="dm" openId={openSection} setOpen={setOpenSection}
+                     title="DM費用"
+                     pill={{ kind: form.dm.include ? 'on' : 'off', text: form.dm.include ? '含める' : 'スキップ' }}
+                     subtotal={sub('dm')}>
+            <Toggle on={form.dm.include} onChange={v => set('dm.include', v)}
+                    label="DM費用を含める" desc="ターゲットへの直送DM" />
+            <Field label="DMプラン">
+              <div className="plan-list scroll-thin" style={{maxHeight: 'none'}}>
+                {D.DM_PLANS.map(p => (
+                  <div key={p.id}
+                       className={`plan-row ${form.dm.plan === p.id ? 'active' : ''}`}
+                       onClick={() => set('dm.plan', p.id)}>
+                    <div>
+                      <div className="name">{p.name}</div>
+                      <div className="meta">{p.meta}</div>
+                    </div>
+                    <div className="price">¥{p.unit}<span style={{fontSize:9, color:'var(--muted-2)', fontWeight:400}}>/通</span></div>
+                  </div>
+                ))}
+              </div>
+            </Field>
+            <div className="field-row">
+              <Field label="月間通数">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.dm.monthlyCount}
+                         onChange={e => set('dm.monthlyCount', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">通</span>
+                </div>
+              </Field>
+              <Field label="封入点数 最大">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.dm.maxItems}
+                         onChange={e => set('dm.maxItems', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">点</span>
+                </div>
+              </Field>
+            </div>
+            <Field label="デザイン構成費" hint="¥50,000 / 面">
+              <div className="field-row">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.dm.designSides}
+                         onChange={e => set('dm.designSides', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">面</span>
+                </div>
+                <div className="input-wrap">
+                  <input className="input num with-suffix" readOnly value={(form.dm.designSides || 0) * 50000} />
+                  <span className="input-suffix">円</span>
+                </div>
+              </div>
+            </Field>
+          </Accordion>
+
+          <Accordion num="6" id="inquiry" openId={openSection} setOpen={setOpenSection}
+                     title="反響対応費用"
+                     pill={{ kind: form.inquiry.include ? 'on' : 'off', text: form.inquiry.include ? '含める' : 'スキップ' }}
+                     subtotal={sub('inquiry')}>
+            <Toggle on={form.inquiry.include} onChange={v => set('inquiry.include', v)}
+                    label="反響対応を含める" desc="一次受電・ヒアリング代行" />
+            <div className="field-row">
+              <Field label="月額単価">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.inquiry.monthly}
+                         onChange={e => set('inquiry.monthly', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">円</span>
+                </div>
+              </Field>
+              <Field label="月間上限件数">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.inquiry.monthlyCap}
+                         onChange={e => set('inquiry.monthlyCap', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">件</span>
+                </div>
+              </Field>
+            </div>
+            <Field label="初期費用" hint="回線設置・スクリプト作成費">
+              <div className="input-wrap">
+                <input className="input num with-suffix" value={form.inquiry.setup}
+                       onChange={e => set('inquiry.setup', Number(e.target.value) || 0)} />
+                <span className="input-suffix">円</span>
+              </div>
+            </Field>
+          </Accordion>
+
+          <Accordion num="7" id="registry" openId={openSection} setOpen={setOpenSection}
+                     title="謄本取得・備考" subtotal={null}>
+            <div className="field-row">
+              <Field label="登記情報 含む件数">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.registry.included}
+                         onChange={e => set('registry.included', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">件</span>
+                </div>
+              </Field>
+              <Field label="超過時単価">
+                <div className="input-wrap">
+                  <input className="input num with-suffix" value={form.registry.overage}
+                         onChange={e => set('registry.overage', Number(e.target.value) || 0)} />
+                  <span className="input-suffix">円</span>
+                </div>
+              </Field>
+            </div>
+            <Field label="カスタム備考">
+              <textarea className="input" style={{height: 60, padding: 6, fontSize: 11, lineHeight: 1.5, resize: 'vertical'}}
+                        value={form.note} onChange={e => set('note', e.target.value)} />
+            </Field>
+          </Accordion>
+
+          <Accordion num="8" id="custom" openId={openSection} setOpen={setOpenSection}
+                     title="カスタム項目" subtotal={sub('custom')}>
+            {form.customRows.map((r, idx) => (
+              <div key={r.id} style={{display:'grid', gap:6, padding:'8px', border:'1px solid var(--border)', borderRadius:'var(--radius)'}}>
+                <Field label={`項目 ${idx + 1}`}>
+                  <input className="input" value={r.label}
+                    placeholder="項目名"
+                    onChange={e => {
+                      const rows = [...form.customRows];
+                      rows[idx] = { ...rows[idx], label: e.target.value };
+                      set('customRows', rows);
+                    }} />
+                </Field>
+                <div className="field-row">
+                  <Field label="数量">
+                    <input className="input num" value={r.qty}
+                      onChange={e => {
+                        const rows = [...form.customRows];
+                        rows[idx] = { ...rows[idx], qty: Number(e.target.value) || 0 };
+                        set('customRows', rows);
+                      }} />
+                  </Field>
+                  <Field label="単位">
+                    <input className="input" value={r.unit}
+                      onChange={e => {
+                        const rows = [...form.customRows];
+                        rows[idx] = { ...rows[idx], unit: e.target.value };
+                        set('customRows', rows);
+                      }} />
+                  </Field>
+                </div>
+                <Field label="単価">
+                  <div className="input-wrap">
+                    <input className="input num with-suffix" value={r.price}
+                      onChange={e => {
+                        const rows = [...form.customRows];
+                        rows[idx] = { ...rows[idx], price: Number(e.target.value) || 0 };
+                        set('customRows', rows);
+                      }} />
+                    <span className="input-suffix">円</span>
+                  </div>
+                </Field>
+                <button className="btn" style={{justifySelf:'end', height:24, fontSize:11}}
+                  onClick={() => set('customRows', form.customRows.filter((_, i) => i !== idx))}>
+                  削除
+                </button>
+              </div>
+            ))}
+            <button className="add-custom" onClick={() => {
+              const id = 'cust-' + Date.now();
+              set('customRows', [...form.customRows, { id, label: '', qty: 1, unit: '式', price: 0 }]);
+            }}>
+              ＋ カスタム項目を追加
+            </button>
+          </Accordion>
+        </div>
+
+        <div className="sidebar-foot">
+          <div className="sb-totalrow"><span>小計</span><span className="num">¥{D.subTotal(D.buildLines(form)).toLocaleString('en-US')}</span></div>
+          <div className="sb-totalrow"><span>消費税 (10%)</span><span className="num">¥{D.tax(D.subTotal(D.buildLines(form))).toLocaleString('en-US')}</span></div>
+          <div className="sb-totalrow grand"><span>合計</span><span className="num">¥{(D.subTotal(D.buildLines(form)) + D.tax(D.subTotal(D.buildLines(form)))).toLocaleString('en-US')}</span></div>
+        </div>
+      </aside>
+    );
+  }
+
+  window.WHERE_Sidebar = Sidebar;
+  })();
+  </script>
+
+  <!-- ============================================================ -->
+  <!-- Preview (preview.jsx inline)                                 -->
+  <!-- ============================================================ -->
+  <script type="text/babel">
+  /* eslint-disable */
+  (function(){
+  const formatJPDate = (s) => {
+    if (!s) return '';
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  };
+
+  function QuoteRow({ line }) {
+    const D = window.WHERE_DATA;
+    if (line.kind === 'detail') {
+      return (
+        <tr className="q-row detail-row">
+          <td className="col-no" />
+          <td className="item">{line.label}</td>
+          <td className="num center" />
+          <td className="num center" />
+          <td className="num" />
+          <td className="num" />
+        </tr>
+      );
+    }
+    return (
+      <tr className="q-row head-row">
+        <td className="col-no center">{line.no}</td>
+        <td className="item">{line.label}</td>
+        <td className="num center">{line.qty}</td>
+        <td className="num center">{line.unit}</td>
+        <td className="num">{D.fmt(line.price)}</td>
+        <td className="num">{D.fmt(line.total)}</td>
+      </tr>
+    );
+  }
+
+  function Preview({ form }) {
+    const D = window.WHERE_DATA;
+    const lines = D.buildLines(form);
+    const sub = D.subTotal(lines);
+    const tax = D.tax(sub);
+    const grand = sub + tax;
+
+    return (
+      <div className="paper">
+        <div className="q-head">
+          <h1 className="q-title">御　見　積　書</h1>
+          <img src="assets/logo-where.png" alt="WHERE" className="q-logo" onError={(e) => e.target.style.display='none'} />
+        </div>
+
+        <div className="q-meta">
+          <div className="q-cust">
+            <div className="name">
+              <span>{form.customer || '（顧客名未入力）'}</span>
+              <span className="honorific">御中</span>
+            </div>
+            <div style={{fontSize: 10.5, color: 'var(--muted)', marginTop: 6}}>
+              <span style={{display:'inline-block', width: 56, color:'var(--muted-2)'}}>件名</span>
+              <span>{form.subject}</span>
+            </div>
+            <div style={{fontSize: 10.5, color: 'var(--muted)'}}>
+              <span style={{display:'inline-block', width: 56, color:'var(--muted-2)'}}>ご利用期間</span>
+              <span style={{fontFamily:'var(--font-en)'}}>{formatJPDate(form.startDate)} ～ {formatJPDate(form.endDate)}</span>
+            </div>
+          </div>
+          <div className="q-vendor">
+            <div style={{fontSize: 10.5, color: 'var(--muted)'}}>発行日 <span style={{fontFamily:'var(--font-en)'}}>{formatJPDate(form.issueDate)}</span></div>
+            <div style={{marginTop: 8}}>{D.VENDOR.address1}</div>
+            {D.VENDOR.address2 && <div>{D.VENDOR.address2}</div>}
+            <div className="corp">{D.VENDOR.company}</div>
+            <div>営業担当：{form.rep}</div>
+            <div className="reg">登録番号：{D.VENDOR.registrationNumber}</div>
+          </div>
+        </div>
+
+        <div className="q-amounts">
+          <div className="lbl">金額</div>
+          <div className="num big">¥{grand.toLocaleString('en-US')}</div>
+          <div className="lbl">別途消費税</div>
+          <div className="num">¥{tax.toLocaleString('en-US')}</div>
+        </div>
+
+        <table className="q-table">
+          <colgroup>
+            <col className="col-no" />
+            <col className="col-item" />
+            <col className="col-qty" />
+            <col className="col-unit" />
+            <col className="col-price" />
+            <col className="col-total" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>項目</th>
+              <th>数量</th>
+              <th>単位</th>
+              <th>単価</th>
+              <th>金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line) => (
+              <QuoteRow key={line.id} line={line} />
+            ))}
+            {Array.from({length: Math.max(0, 14 - lines.length)}).map((_, i) => (
+              <tr key={'pad-' + i} className="q-row">
+                <td className="col-no" />
+                <td />
+                <td />
+                <td />
+                <td className="num" />
+                <td className="num" />
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={4} style={{border: 'none', background: 'transparent'}} />
+              <td>小計</td>
+              <td className="num">{D.fmt(sub)}</td>
+            </tr>
+            <tr>
+              <td colSpan={4} style={{border: 'none', background: 'transparent'}} />
+              <td>消費税 (10%)</td>
+              <td className="num">{D.fmt(tax)}</td>
+            </tr>
+            <tr className="grand">
+              <td colSpan={4} style={{border: 'none', background: 'transparent'}} />
+              <td>合計</td>
+              <td className="num">¥{grand.toLocaleString('en-US')}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div className="q-notes">
+          <h4>備考</h4>
+          <ul>
+            <li><span>本見積書の有効期限は {formatJPDate(form.expireDate)} とさせて頂きます。</span></li>
+            {form.license.special && <li><span>本見積書は 特別プラン を {form.license.months}ヶ月間 の継続利用とする金額です。</span></li>}
+            <li><span>不動産登記情報取得件数：{form.registry.included} カウントを含む。超過分は ¥{form.registry.overage.toLocaleString('en-US')}/件 にて別途ご請求いたします。</span></li>
+            {form.note && <li><span>{form.note}</span></li>}
+            <li>請求書は月次後払いにて発行いたします。お支払い条件は別途契約書にて取り交わしさせて頂きます。</li>
+          </ul>
+        </div>
+
+        <div className="q-stamp">
+          <div className="box"><div className="head">担当</div></div>
+          <div className="box"><div className="head">確認</div></div>
+          <div className="box"><div className="head">承認</div></div>
+        </div>
+      </div>
+    );
+  }
+
+  window.WHERE_Preview = Preview;
+  })();
+  </script>
+
+  <!-- ============================================================ -->
+  <!-- App Shell — production wiring                                -->
+  <!-- ============================================================ -->
+  <script type="text/babel">
+  /* eslint-disable */
+  (function(){
+  const { useState, useEffect, useRef } = React;
+  const STORAGE_KEY = 'where_estimate_v1';
+  const D = window.WHERE_DATA;
+
+  // URL パラメータを取得（拡張機能から initial 値などを受け取る）
+  const urlParams = new URLSearchParams(window.location.search);
+  const fromExtension = urlParams.get('source') === 'gmail-extension';
+  const composeId = urlParams.get('composeId');
+  const recipientHint = urlParams.get('to') || '';
+
+  const SaveIco = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+  const PdfIco = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>;
+  const ExcelIco = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>;
+  const NewIco = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="13" x2="12" y2="19"/><line x1="9" y1="16" x2="15" y2="16"/></svg>;
+
+  function Topbar({ onNew, onSave, onPdf, onExcel, onComplete, lastSaved, configVer }) {
+    return (
+      <div className="topbar">
+        <div className="topbar-left">
+          <img src="assets/logo-where.png" alt="WHERE" className="topbar-logo" onError={(e) => e.target.style.display='none'} />
+          <div className="topbar-divider" />
+          <div className="topbar-title">見積書メーカー</div>
+          <div className="topbar-meta">
+            {lastSaved && <span className="crumb">最終保存 {lastSaved}</span>}
+            <span className="crumb-sep">/</span>
+            <a href="logic.html" target="_blank" rel="noopener" style={{color:'var(--muted)', textDecoration:'none', fontFamily:'var(--font-en)', fontSize:11}}>算出ロジック</a>
+            <span className="crumb-sep">/</span>
+            <span className="doc-id">設定 v{configVer}</span>
+          </div>
+        </div>
+        <div />
+        <div className="topbar-right">
+          <button className="btn btn-ghost" onClick={onNew} title="入力をリセット"><NewIco />新規</button>
+          <button className="btn btn-ghost" onClick={onSave}><SaveIco />保存</button>
+          <button className="btn" onClick={onExcel}><ExcelIco />CSV出力</button>
+          <button className="btn" onClick={onPdf}><PdfIco />PDFダウンロード</button>
+          {fromExtension && (
+            <button className="btn btn-primary" onClick={onComplete} title="メールに添付して保存・通知">
+              <CheckIco />完了 → メールに添付
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  const CheckIco = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="5 12 10 17 19 8"/></svg>;
+
+  function PreviewToolbar({ zoom, setZoom }) {
+    return (
+      <div className="preview-toolbar">
+        <div className="left">
+          <span style={{fontWeight: 600, color: 'var(--ink)'}}>プレビュー</span>
+          <span style={{fontSize: 11}}>A4・縦・1ページ</span>
+        </div>
+        <div className="center">
+          <button className="zoom-btn" onClick={() => setZoom(Math.max(60, zoom - 10))}>−</button>
+          <span style={{minWidth: 46, textAlign: 'center'}}>{zoom}%</span>
+          <button className="zoom-btn" onClick={() => setZoom(Math.min(150, zoom + 10))}>＋</button>
+        </div>
+        <div className="right" />
+      </div>
+    );
+  }
+
+  function PreviewFooter({ form }) {
+    const sub = D.subTotal(D.buildLines(form));
+    const tax = D.tax(sub);
+    const grand = sub + tax;
+    return (
+      <div className="preview-foot">
+        <div />
+        <div style={{display: 'flex', alignItems: 'baseline', gap: 14}}>
+          <span className="label">税込合計</span>
+          <span className="grand">¥{grand.toLocaleString('en-US')}</span>
+          <span className="label">（小計 ¥{sub.toLocaleString('en-US')} ／ 消費税 ¥{tax.toLocaleString('en-US')}）</span>
+        </div>
+        <div />
+      </div>
+    );
+  }
+
+  // 出力ファイル名（PDF/CSV共通）
+  function makeFilename(form, ext) {
+    const cust = (form.customer || '株式会社〇〇〇').replace(/[\\/:*?"<>|]/g, '_');
+    return `【${cust}御中】WHERE利用費見積書.${ext}`;
+  }
+
+  // PDF Blob 生成（html2pdf を利用）
+  async function generatePdfBlob(form) {
+    if (!window.html2pdf) throw new Error('html2pdf が読み込まれていません');
+    // プレビューのDOMノードを取得
+    const paper = document.querySelector('.preview-pane .paper');
+    if (!paper) throw new Error('プレビューが見つかりません');
+    // 拡大率を一旦リセットしてキャプチャ
+    const wrapper = paper.parentElement;
+    const prevTransform = wrapper.style.transform;
+    wrapper.style.transform = 'scale(1)';
+    try {
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: makeFilename(form, 'pdf'),
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      const pdf = await window.html2pdf().set(opt).from(paper).outputPdf('blob');
+      return pdf;
+    } finally {
+      wrapper.style.transform = prevTransform;
+    }
+  }
+
+  function downloadCSV(form) {
+    const lines = D.buildLines(form);
+    const sub = D.subTotal(lines);
+    const tax = D.tax(sub);
+    const grand = sub + tax;
+    const esc = (v) => {
+      const s = (v == null ? '' : String(v));
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const rows = [];
+    rows.push(['御見積書']);
+    rows.push(['顧客', form.customer]);
+    rows.push(['件名', form.subject]);
+    rows.push(['発行日', form.issueDate, '有効期限', form.expireDate]);
+    rows.push(['ご利用期間', form.startDate + ' 〜 ' + form.endDate]);
+    rows.push(['営業担当', form.rep]);
+    rows.push([]);
+    rows.push(['No.', '項目', '数量', '単位', '単価', '金額']);
+    for (const l of lines) {
+      if (l.kind === 'group') {
+        rows.push([l.no, l.label, l.qty, l.unit, l.price, l.total]);
+      } else {
+        rows.push(['', l.label, '', '', '', '']);
+      }
+    }
+    rows.push([]);
+    rows.push(['', '', '', '', '小計', sub]);
+    rows.push(['', '', '', '', '消費税 (10%)', tax]);
+    rows.push(['', '', '', '', '合計', grand]);
+
+    const csv = rows.map(r => r.map(esc).join(',')).join('\r\n');
+    const bom = '﻿';
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = makeFilename(form, 'csv');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ============================================================
+  // 起動モーダル：必須項目を入力してからエディタを開始
+  // ============================================================
+  function StartupModal({ defaults, onStart, onCancel }) {
+    const [customer, setCustomer]     = useState(defaults.customer || '');
+    const [subject, setSubject]       = useState(defaults.subject || D.SUBJECTS[1]);
+    const [rep, setRep]               = useState(defaults.rep || D.REPS[0]);
+    const [startDate, setStartDate]   = useState(defaults.startDate);
+    const [endDate, setEndDate]       = useState(defaults.endDate);
+    const [issueDate, setIssueDate]   = useState(defaults.issueDate);
+    const [expireDate, setExpireDate] = useState(defaults.expireDate);
+    const [licensePlan, setLicensePlan] = useState(defaults.license.plan);
+    const [months, setMonths]         = useState(defaults.months);
+    const [error, setError] = useState('');
+
+    const submit = () => {
+      if (!customer.trim()) { setError('顧客名を入力してください'); return; }
+      const plan = D.PLANS.find(p => p.id === licensePlan) || D.PLANS[0];
+      onStart({
+        customer: customer.trim(),
+        subject, rep, startDate, endDate, issueDate, expireDate,
+        months,
+        license: { plan: plan.id, monthly: plan.monthly, months, special: false }
+      });
+    };
+
+    return (
+      <div className="modal-overlay" style={{position:'fixed', inset:0}}>
+        <div className="modal" style={{width: 520}}>
+          <div className="modal-head">
+            <h3>見積書を作成 — 必須項目の入力</h3>
+          </div>
+          <div className="modal-body">
+            <div style={{fontSize:12, color:'var(--muted)'}}>必須項目を入力してください。導入支援費用は入力内容を元に自動算出されます（後から編集可）。</div>
+
+            <div className="field">
+              <div className="label"><span>顧客名 <span style={{color:'#b91c1c'}}>*</span></span></div>
+              <input className="input" autoFocus value={customer}
+                onChange={e => setCustomer(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+                placeholder="株式会社○○" />
+            </div>
+
+            <div className="field">
+              <div className="label"><span>件名</span></div>
+              <select className="select" value={subject} onChange={e => setSubject(e.target.value)}>
+                {D.SUBJECTS.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div className="field-row">
+              <div className="field">
+                <div className="label"><span>営業担当</span></div>
+                <select className="select" value={rep} onChange={e => setRep(e.target.value)}>
+                  {D.REPS.map(r => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <div className="label"><span>契約期間</span></div>
+                <select className="select" value={months} onChange={e => setMonths(Number(e.target.value))}>
+                  {Array.from({length:36},(_,i)=>i+1).map(m => <option key={m} value={m}>{m} ヶ月</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="field">
+              <div className="label"><span>ライセンスプラン</span></div>
+              <select className="select" value={licensePlan} onChange={e => setLicensePlan(e.target.value)}>
+                {D.PLANS.map(p => <option key={p.id} value={p.id}>{p.name}（¥{p.monthly.toLocaleString('en-US')}/月）</option>)}
+              </select>
+            </div>
+
+            <div className="field-row">
+              <div className="field">
+                <div className="label"><span>ご利用期間 開始</span></div>
+                <input type="date" className="input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              </div>
+              <div className="field">
+                <div className="label"><span>ご利用期間 終了</span></div>
+                <input type="date" className="input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="field-row">
+              <div className="field">
+                <div className="label"><span>発行日</span></div>
+                <input type="date" className="input" value={issueDate} onChange={e => setIssueDate(e.target.value)} />
+              </div>
+              <div className="field">
+                <div className="label"><span>有効期限</span></div>
+                <input type="date" className="input" value={expireDate} onChange={e => setExpireDate(e.target.value)} />
+              </div>
+            </div>
+
+            {error && <div style={{color:'#b91c1c', fontSize:12}}>{error}</div>}
+          </div>
+          <div className="modal-foot">
+            {onCancel && <button className="btn" onClick={onCancel}>キャンセル</button>}
+            <button className="btn btn-primary" onClick={submit}>編集をスタート</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function App({ initialForm, skipStartupModal }) {
+    const Sidebar = window.WHERE_Sidebar;
+    const Preview = window.WHERE_Preview;
+    const [showStartup, setShowStartup] = useState(!skipStartupModal);
+    const [form, setForm] = useState(initialForm);
+    const [openSection, setOpenSection] = useState('customer');
+    const [zoom, setZoom] = useState(92);
+    const [toast, setToast] = useState(null);
+    const [lastSaved, setLastSaved] = useState(null);
+    const [busy, setBusy] = useState(null);
+    const debounceRef = useRef(null);
+    const onboardingTouched = useRef(false);
+
+    // 自動保存
+    useEffect(() => {
+      if (showStartup) return;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
+          const now = new Date();
+          const p = (n) => String(n).padStart(2, '0');
+          setLastSaved(`${p(now.getHours())}:${p(now.getMinutes())}`);
+        } catch (e) { /* quota etc. — ignore */ }
+      }, 500);
+      return () => clearTimeout(debounceRef.current);
+    }, [form, showStartup]);
+
+    // 導入支援費用の自動算出（ユーザーが手動編集するまで自動更新）
+    useEffect(() => {
+      if (showStartup) return;
+      if (onboardingTouched.current) return;
+      const recommended = D.recommendedOnboarding(form);
+      if (form.onboarding.amount !== recommended) {
+        setForm(prev => ({
+          ...prev,
+          onboarding: { ...prev.onboarding, amount: recommended }
+        }));
+      }
+    }, [
+      form.license.monthly,
+      form.dm.include, form.dm.plan, form.dm.monthlyCount,
+      form.inquiry.include, form.inquiry.monthly,
+      showStartup
+    ]);
+
+    // 導入支援費用を手動編集したらフラグを立てて自動算出を停止
+    const wrappedSetForm = (updater) => {
+      setForm(prev => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        if (next.onboarding && prev.onboarding && next.onboarding.amount !== prev.onboarding.amount) {
+          // 自動算出値と一致しない場合のみ "手動編集" 扱い
+          const recommended = D.recommendedOnboarding(prev);
+          if (next.onboarding.amount !== recommended) {
+            onboardingTouched.current = true;
+          }
+        }
+        return next;
+      });
+    };
+
+    const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+
+    const onStart = (vals) => {
+      const fresh = D.defaultForm('where_dm');
+      const next = {
+        ...fresh, ...vals,
+        onboarding: { ...fresh.onboarding },
+        dm: { ...fresh.dm },
+        inquiry: { ...fresh.inquiry },
+        registry: { ...fresh.registry },
+        customRows: []
+      };
+      // 導入支援費用を即座に自動算出
+      next.onboarding.amount = D.recommendedOnboarding(next);
+      setForm(next);
+      onboardingTouched.current = false;
+      setShowStartup(false);
+    };
+
+    const onSave = () => {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(form)); flash('保存しました'); }
+      catch (e) { flash('保存に失敗しました'); }
+    };
+    const onNew = () => {
+      if (!confirm('入力をすべてリセットして新規作成しますか？')) return;
+      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+      onboardingTouched.current = false;
+      setShowStartup(true);
+    };
+    const onPdf = async () => {
+      setBusy('PDFを生成中...');
+      try {
+        const blob = await generatePdfBlob(form);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = makeFilename(form, 'pdf');
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        flash('PDFをダウンロードしました');
+      } catch (e) {
+        console.error(e);
+        flash('PDF生成に失敗しました（ブラウザ印刷で代替できます: Ctrl+P）');
+      } finally { setBusy(null); }
+    };
+    const onExcel = () => {
+      try { downloadCSV(form); flash('CSVをダウンロードしました'); }
+      catch (e) { flash('出力に失敗しました'); }
+    };
+
+    // 拡張機能連携：完了 → メールに添付・Drive保存・Slack投稿
+    const onComplete = async () => {
+      setBusy('PDFを生成中...');
+      try {
+        const blob = await generatePdfBlob(form);
+        const filename = makeFilename(form, 'pdf');
+        // PDF を ArrayBuffer → base64 化
+        const buf = await blob.arrayBuffer();
+        let bin = '';
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        const base64 = btoa(bin);
+
+        const payload = {
+          type: 'WHERE_ESTIMATE_COMPLETE',
+          composeId,
+          filename,
+          base64,
+          mime: 'application/pdf',
+          form: {
+            customer: form.customer,
+            subject: form.subject,
+            rep: form.rep,
+            issueDate: form.issueDate,
+            grand: D.subTotal(D.buildLines(form)) + D.tax(D.subTotal(D.buildLines(form)))
+          }
+        };
+        // 拡張機能の content-script に postMessage で渡す
+        window.postMessage(payload, '*');
+        // 親ウィンドウ（拡張機能がオープナーの場合）にも通知
+        if (window.opener && !window.opener.closed) {
+          try { window.opener.postMessage(payload, '*'); } catch (e) {}
+        }
+        flash('メールに添付しました。Drive/Slack 連携も実行されます。');
+      } catch (e) {
+        console.error(e);
+        flash('処理に失敗しました');
+      } finally { setBusy(null); }
+    };
+
+    // ショートカット
+    useEffect(() => {
+      const onKey = (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); onSave(); }
+        if ((e.metaKey || e.ctrlKey) && e.key === 'p') { e.preventDefault(); onPdf(); }
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }, [form]);
+
+    if (showStartup) {
+      return (
+        <StartupModal
+          defaults={form}
+          onStart={onStart}
+          onCancel={skipStartupModal ? () => setShowStartup(false) : null} />
+      );
+    }
+
+    return (
+      <div className="app">
+        <Topbar onNew={onNew} onSave={onSave} onPdf={onPdf} onExcel={onExcel}
+                onComplete={onComplete}
+                lastSaved={lastSaved} configVer={D.CONFIG_VERSION} />
+        <div className="main">
+          <Sidebar form={form} setForm={wrappedSetForm}
+                   openSection={openSection} setOpenSection={setOpenSection} />
+          <div className="preview-pane">
+            <PreviewToolbar zoom={zoom} setZoom={setZoom} />
+            <div className="preview-scroll">
+              <div style={{transform: `scale(${zoom/100})`, transformOrigin: 'top center'}}>
+                <Preview form={form} />
+              </div>
+            </div>
+            <PreviewFooter form={form} />
+          </div>
+        </div>
+        {busy && <div className="toast">{busy}</div>}
+        {!busy && toast && <div className="toast">{toast}</div>}
+      </div>
+    );
+  }
+
+  async function mount() {
+    if (!window.WHERE_Sidebar || !window.WHERE_Preview) {
+      setTimeout(mount, 50);
+      return;
+    }
+    // variables.json の取得を待ってから初期化
+    const vars = await window.WHERE_VARS_PROMISE;
+    if (vars) D.applyVariables(vars);
+
+    // localStorage に保存済みの入力があれば再開、なければ起動モーダル
+    let initial, skipModal = false;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const base = D.defaultForm('where_dm');
+        initial = {
+          ...base, ...parsed,
+          onboarding: { ...base.onboarding, ...(parsed.onboarding || {}) },
+          license:    { ...base.license,    ...(parsed.license || {}) },
+          dm:         { ...base.dm,         ...(parsed.dm || {}) },
+          inquiry:    { ...base.inquiry,    ...(parsed.inquiry || {}) },
+          registry:   { ...base.registry,   ...(parsed.registry || {}) },
+          customRows: parsed.customRows || []
+        };
+        // 拡張機能経由かつ composeId が変わっていれば新規起動扱い
+        if (fromExtension) {
+          initial = D.defaultForm('where_dm');
+          skipModal = false;
+        } else {
+          skipModal = true;
+        }
+      } else {
+        initial = D.defaultForm('where_dm');
+      }
+    } catch (e) {
+      initial = D.defaultForm('where_dm');
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App initialForm={initial} skipStartupModal={skipModal} />);
+  }
+  mount();
+  })();
+  </script>
+</body>
+</html>

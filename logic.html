@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>算出ロジック — WHERE 見積書メーカー</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f5f5f4; --surface: #fff; --ink: #0a0a0a; --muted: #525252;
+      --border: #e5e7eb; --accent: #1e3a8a; --accent-soft: #eef2ff;
+      --code-bg: #0f172a; --code-fg: #e2e8f0;
+      --font-jp: "Noto Sans JP", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: var(--font-jp);
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.7;
+    }
+    .container {
+      max-width: 880px; margin: 0 auto;
+      padding: 32px 24px 64px 24px;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px; margin-bottom: 24px;
+    }
+    header h1 { font-size: 22px; margin: 0 0 6px 0; }
+    header .meta { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+    header .badge {
+      font-family: var(--font-mono); font-size: 11px;
+      background: var(--accent-soft); color: var(--accent);
+      padding: 2px 8px; border-radius: 999px;
+    }
+    h2 {
+      font-size: 16px; margin-top: 32px; padding-top: 4px;
+      border-top: 1px solid var(--border); padding-top: 16px;
+    }
+    h3 { font-size: 14px; color: var(--accent); margin-top: 20px; }
+    p, li { font-size: 13px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 12px 0;
+    }
+    .formula {
+      display: block;
+      background: var(--code-bg); color: var(--code-fg);
+      padding: 12px 16px; border-radius: 6px;
+      font-family: var(--font-mono); font-size: 12px;
+      overflow-x: auto; line-height: 1.6;
+      margin: 8px 0;
+    }
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 12px; margin: 8px 0 16px 0;
+    }
+    th, td {
+      border: 1px solid var(--border); padding: 6px 10px;
+      text-align: left;
+    }
+    th { background: var(--accent-soft); font-weight: 600; }
+    td.num { text-align: right; font-family: var(--font-mono); }
+    .var-name { font-family: var(--font-mono); color: #b91c1c; font-size: 12px; }
+    .nav {
+      position: sticky; top: 16px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 12px;
+    }
+    .nav a { color: var(--accent); text-decoration: none; margin-right: 14px; }
+    .nav a:hover { text-decoration: underline; }
+    .loading { color: var(--muted); font-style: italic; font-size: 12px; }
+    .err { color: #b91c1c; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>WHERE 見積書メーカー — 算出ロジック</h1>
+      <div class="meta">
+        <span>このページは全ユーザーが閲覧できます。</span>
+        <span id="ver" class="badge">読込中...</span>
+        <span id="updated"></span>
+      </div>
+    </header>
+
+    <nav class="nav">
+      <a href="#overview">全体構造</a>
+      <a href="#onboarding">導入支援費用</a>
+      <a href="#license">ライセンス</a>
+      <a href="#dm">DM費用</a>
+      <a href="#inquiry">反響対応</a>
+      <a href="#totals">小計・税・合計</a>
+      <a href="#plans">プラン一覧</a>
+      <a href="#changelog">変数の変更について</a>
+    </nav>
+
+    <section id="overview">
+      <h2>1. 全体構造</h2>
+      <p>見積書の合計金額は、以下の各項目の合計に消費税を加算したものです。</p>
+      <code class="formula">合計 = (導入支援 + ライセンス + DM + DMデザイン + 反響対応月額 + 反響対応初期 + カスタム) × (1 + 税率)</code>
+      <p>各項目は「含める / スキップ」をトグルで切り替え可能です。</p>
+    </section>
+
+    <section id="onboarding">
+      <h2>2. 導入支援費用（オンボーディング）</h2>
+      <div class="card">
+        <p>初回オンボーディング作業の費用。<strong>デフォルト値は月額固定費合計の <span class="var-name" id="v-mult">2.5</span> ヶ月分</strong> として自動算出されます。</p>
+        <code class="formula">導入支援費用（推奨） = (ライセンス月額 + DM月額 + 反響対応月額) × <span id="v-mult2">2.5</span></code>
+        <p>サイドバーで手動上書き可能。係数は管理者が <span class="var-name">variables.json</span> の <code>onboarding.multiplierMonths</code> で変更できます。</p>
+      </div>
+    </section>
+
+    <section id="license">
+      <h2>3. WHEREライセンス費用</h2>
+      <code class="formula">ライセンス合計 = 月額単価 × 期間（ヶ月）</code>
+      <p>プランを選択すると <span class="var-name">plans[].monthly</span> が単価に反映されます。「特別プラン」チェックを有効にすると備考欄にその旨が記載されます。</p>
+      <p>ターゲット数を超過した場合の単価は <span class="var-name">plans[].overage</span>（円/カウント）として備考に表示されます。</p>
+    </section>
+
+    <section id="dm">
+      <h2>4. DM費用</h2>
+      <code class="formula">DM月額 = DMプラン単価 × 月間通数</code>
+      <code class="formula">DM合計 = DM月額 × 契約期間（ヶ月）</code>
+      <code class="formula">DMデザイン構成費 = 面数 × <span id="v-design">50,000</span></code>
+      <p>DMプラン単価は <span class="var-name">dmPlans[].unit</span>（円/通）。デザイン費単価は <span class="var-name">designFeePerSide</span>。</p>
+    </section>
+
+    <section id="inquiry">
+      <h2>5. 反響対応費用</h2>
+      <code class="formula">反響対応月額合計 = 月額単価 × 契約期間（ヶ月）</code>
+      <code class="formula">反響対応 初期費用 = 設定額（一括）</code>
+      <p>月間上限件数を超えた場合の追加費用ロジックは別途運用ルールに従います（自動算出対象外）。</p>
+    </section>
+
+    <section id="totals">
+      <h2>6. 小計・税・合計</h2>
+      <code class="formula">小計 = 上記すべての合計</code>
+      <code class="formula">消費税 = floor(小計 × <span id="v-tax">0.10</span>)</code>
+      <code class="formula">合計 = 小計 + 消費税</code>
+      <p>消費税は <strong>切り捨て（floor）</strong> です。税率は <span class="var-name">tax.rate</span> で変更できます。</p>
+    </section>
+
+    <section id="plans">
+      <h2>7. プラン一覧（現在の値）</h2>
+      <h3>WHEREライセンスプラン</h3>
+      <div id="plans-table" class="loading">読込中...</div>
+
+      <h3>DMプラン</h3>
+      <div id="dm-table" class="loading">読込中...</div>
+
+      <h3>営業担当者一覧</h3>
+      <div id="reps-list" class="loading">読込中...</div>
+    </section>
+
+    <section id="changelog">
+      <h2>8. 変数の修正・履歴・ロールバックについて</h2>
+      <div class="card">
+        <p>すべての変数は GitHub リポジトリの <span class="var-name">variables.json</span> で管理されています。</p>
+        <ul>
+          <li><strong>修正</strong>：管理者は GitHub 上で Pull Request を作成し、レビュー後にマージすると全ユーザーに反映されます。</li>
+          <li><strong>バージョン管理</strong>：すべての変更は Git の commit 履歴として記録されます。</li>
+          <li><strong>ロールバック</strong>：任意の commit に戻すには、対象 commit を <code>git revert</code> するか、<code>variables.json</code> の内容をその時点に戻す PR を作成してください。</li>
+          <li><strong>バリデーション</strong>：<span class="var-name">.github/workflows/validate-variables.yml</span> が PR 時点でスキーマ違反を検出します。</li>
+        </ul>
+        <p>運用詳細は <span class="var-name">README.md</span> を参照してください。</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const FALLBACK = {
+      version: "1.0.0", updatedAt: "—",
+      tax: { rate: 0.10 },
+      onboarding: { multiplierMonths: 2.5 },
+      designFeePerSide: 50000,
+      plans: [], dmPlans: [], reps: []
+    };
+
+    async function load() {
+      let data = FALLBACK;
+      try {
+        const res = await fetch('variables.json', { cache: 'no-cache' });
+        if (res.ok) data = await res.json();
+      } catch (e) { /* fallback */ }
+
+      document.getElementById('ver').textContent = 'v' + (data.version || '?');
+      document.getElementById('updated').textContent = '更新: ' + (data.updatedAt || '—');
+
+      const mult = data.onboarding?.multiplierMonths ?? 2.5;
+      document.getElementById('v-mult').textContent = mult;
+      document.getElementById('v-mult2').textContent = mult;
+      document.getElementById('v-design').textContent =
+        (data.designFeePerSide ?? 50000).toLocaleString('en-US');
+      document.getElementById('v-tax').textContent = data.tax?.rate ?? 0.10;
+
+      // Plans table
+      const plans = data.plans || [];
+      const ptbl = ['<table><thead><tr><th>ID</th><th>プラン名</th><th>月額</th><th>ターゲット数</th><th>超過単価</th></tr></thead><tbody>'];
+      for (const p of plans) {
+        ptbl.push(`<tr><td>${p.id}</td><td>${p.name}</td>` +
+          `<td class="num">¥${(p.monthly||0).toLocaleString('en-US')}</td>` +
+          `<td class="num">${p.target}</td>` +
+          `<td class="num">¥${(p.overage||0).toLocaleString('en-US')}</td></tr>`);
+      }
+      ptbl.push('</tbody></table>');
+      document.getElementById('plans-table').className = '';
+      document.getElementById('plans-table').innerHTML = ptbl.join('');
+
+      // DM plans table
+      const dms = data.dmPlans || [];
+      const dtbl = ['<table><thead><tr><th>ID</th><th>プラン名</th><th>単価/通</th></tr></thead><tbody>'];
+      for (const d of dms) {
+        dtbl.push(`<tr><td>${d.id}</td><td>${d.name}</td>` +
+          `<td class="num">¥${(d.unit||0).toLocaleString('en-US')}</td></tr>`);
+      }
+      dtbl.push('</tbody></table>');
+      document.getElementById('dm-table').className = '';
+      document.getElementById('dm-table').innerHTML = dtbl.join('');
+
+      // Reps
+      const reps = data.reps || [];
+      document.getElementById('reps-list').className = '';
+      document.getElementById('reps-list').innerHTML =
+        '<p style="font-size:12px;color:var(--muted)">' +
+        reps.map(r => `<span style="display:inline-block;padding:2px 8px;background:var(--surface);border:1px solid var(--border);border-radius:999px;margin:2px">${r}</span>`).join('') +
+        '</p>';
+    }
+    load();
+  </script>
+</body>
+</html>

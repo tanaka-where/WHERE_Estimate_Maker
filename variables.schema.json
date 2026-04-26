@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WHERE 見積書メーカー — variables.json",
+  "type": "object",
+  "required": ["version", "tax", "onboarding", "designFeePerSide", "vendor", "subjects", "plans", "dmPlans", "reps"],
+  "properties": {
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "updatedAt": { "type": "string", "format": "date" },
+    "tax": {
+      "type": "object",
+      "required": ["rate", "label"],
+      "properties": {
+        "rate":  { "type": "number", "minimum": 0, "maximum": 1 },
+        "label": { "type": "string" }
+      }
+    },
+    "onboarding": {
+      "type": "object",
+      "required": ["multiplierMonths"],
+      "properties": {
+        "multiplierMonths": { "type": "number", "minimum": 0 },
+        "description": { "type": "string" }
+      }
+    },
+    "designFeePerSide": { "type": "integer", "minimum": 0 },
+    "vendor": {
+      "type": "object",
+      "required": ["company", "address1", "registrationNumber"],
+      "properties": {
+        "company": { "type": "string" },
+        "address1": { "type": "string" },
+        "address2": { "type": "string" },
+        "registrationNumber": { "type": "string" }
+      }
+    },
+    "subjects": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "plans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "monthly"],
+        "properties": {
+          "id":      { "type": "string" },
+          "name":    { "type": "string" },
+          "monthly": { "type": "integer", "minimum": 0 },
+          "target":  { },
+          "overage": { "type": "integer" },
+          "meta":    { "type": "string" }
+        }
+      }
+    },
+    "dmPlans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "unit"],
+        "properties": {
+          "id":   { "type": "string" },
+          "name": { "type": "string" },
+          "unit": { "type": "integer", "minimum": 0 },
+          "meta": { "type": "string" }
+        }
+      }
+    },
+    "reps": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

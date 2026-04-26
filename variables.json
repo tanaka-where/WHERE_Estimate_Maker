@@ -1,0 +1,48 @@
+{
+  "$schema": "./variables.schema.json",
+  "version": "1.0.0",
+  "updatedAt": "2026-04-26",
+  "tax": {
+    "rate": 0.10,
+    "label": "消費税 (10%)"
+  },
+  "onboarding": {
+    "multiplierMonths": 2.5,
+    "description": "導入支援費用は、月額固定費（ライセンス＋DM＋反響対応）合計の 2.5 ヶ月分をデフォルトとする"
+  },
+  "designFeePerSide": 50000,
+  "vendor": {
+    "company": "株式会社WHERE",
+    "address1": "東京都文京区湯島四丁目1番16号",
+    "address2": "Gate Cross HONGO 7階",
+    "registrationNumber": "T1010001224810"
+  },
+  "subjects": [
+    "WHERE利用費",
+    "WHERE利用費 / DM費用",
+    "WHERE利用費 / DM費用 / 反響対応費用"
+  ],
+  "plans": [
+    { "id": "id",         "name": "IDプラン",                 "monthly": 100000,  "target": "従量", "overage": 200,  "meta": "ターゲット数：従量 / 超過 ¥200/カウント" },
+    { "id": "trial",      "name": "トライアルプラン",         "monthly": 300000,  "target": 250,    "overage": 1200, "meta": "最大 250 / 超過 ¥1,200/カウント" },
+    { "id": "entry",      "name": "エントリプラン",           "monthly": 400000,  "target": 333,    "overage": 1100, "meta": "最大 333 / 超過 ¥1,100/カウント" },
+    { "id": "standard",   "name": "スタンダードプラン",       "monthly": 500000,  "target": 500,    "overage": 1000, "meta": "最大 500 / 超過 ¥1,000/カウント" },
+    { "id": "advance",    "name": "アドバンスプラン",         "monthly": 700000,  "target": 1000,   "overage": 700,  "meta": "最大 1,000 / 超過 ¥700/カウント" },
+    { "id": "pro",        "name": "プロフェッショナルプラン", "monthly": 1000000, "target": 1700,   "overage": 600,  "meta": "最大 1,700 / 超過 ¥600/カウント" },
+    { "id": "specialist", "name": "スペシャリストプラン",     "monthly": 1500000, "target": 2800,   "overage": 550,  "meta": "最大 2,800 / 超過 ¥550/カウント" },
+    { "id": "expert",     "name": "エキスパートプラン",       "monthly": 2000000, "target": 4000,   "overage": 500,  "meta": "最大 4,000 / 超過 ¥500/カウント" },
+    { "id": "scale",      "name": "スケールプラン",           "monthly": 3000000, "target": 7500,   "overage": 400,  "meta": "最大 7,500 / 超過 ¥400/カウント" },
+    { "id": "enterprise", "name": "エンタープライズプラン",   "monthly": 4000000, "target": 13500,  "overage": 300,  "meta": "最大 13,500 / 超過 ¥300/カウント" }
+  ],
+  "dmPlans": [
+    { "id": "basic",    "name": "ベーシック",   "unit": 330, "meta": "¥330/通" },
+    { "id": "standard", "name": "スタンダード", "unit": 460, "meta": "¥460/通" },
+    { "id": "premium",  "name": "プレミアム",   "unit": 620, "meta": "¥620/通" }
+  ],
+  "reps": [
+    "阿部 文哉","大多和 奈岐","落合 健太","鎌田 紗耶加","金子 莉奈",
+    "境 健太","佐藤 瞭","鈴木 優仁子","須藤 大貴","高野 智樹",
+    "野出 貴代","萩原 稲一郎","藤井 富実矢","村山 知輝","山本 哲郎",
+    "渡辺 悠太","関根 ゆたか","田續 陸","宮城 りな"
+  ]
+}

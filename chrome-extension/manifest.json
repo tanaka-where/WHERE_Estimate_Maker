@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "WHERE 見積書メーカー — Gmail 連携",
+  "version": "1.0.0",
+  "description": "Gmail のメール作成画面から見積書メーカーを起動し、PDF を添付・Drive 保存・Slack 通知を行う",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "WHERE 見積書メーカー — 設定"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "identity",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://www.googleapis.com/*",
+    "https://hooks.slack.com/*"
+  ],
+  "oauth2": {
+    "client_id": "REPLACE_WITH_YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.file"
+    ]
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["editor-bridge.js"],
+      "matches": ["https://mail.google.com/*"]
+    }
+  ]
+}
