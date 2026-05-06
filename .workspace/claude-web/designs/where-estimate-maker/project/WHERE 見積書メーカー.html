@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>WHERE 見積書メーカー</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { background: #f0eee9; }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="data.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="sidebar.jsx"></script>
+  <script type="text/babel" src="preview.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+  <script type="text/babel">
+    const D = window.WHERE_DATA;
+    const App = window.WHERE_App;
+
+    const TWEAKS_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "subjectPreset": "where"
+    }/*EDITMODE-END*/;
+
+    function Root() {
+      const [tweaks, setTweak] = useTweaks(TWEAKS_DEFAULTS);
+
+      // Build form variants from preset
+      const baseForm = React.useMemo(() => D.defaultForm(tweaks.subjectPreset), [tweaks.subjectPreset]);
+
+      // 4 artboards covering the deliverables ①〜④
+      // 1) 通常状態 (default — uses preset)
+      const form1 = baseForm;
+      // 2) ホバー時 (row hover with delete + drag + insert visible)
+      const form2 = baseForm;
+      // 3) DMセクション展開 — close-up
+      const form3 = baseForm;
+      // 4) インライン編集中
+      const form4 = (() => {
+        const f = JSON.parse(JSON.stringify(baseForm));
+        // Simulate user manually adding a custom row to trigger "deviated"
+        f.customRows = [{ id: 'cust-extra', label: '追加：効果分析レポート（月次）', qty: 12, unit: 'ヶ月', price: 80000 }];
+        return f;
+      })();
+
+      return (
+        <React.Fragment>
+        <DesignCanvas>
+          <DCSection id="states" title="WHERE 見積書メーカー — 入力画面" subtitle="提出物 ①〜④ : 通常状態 / 行ホバー / DMセクション展開 / インライン編集中">
+            <DCArtboard id="state-1" label="① 通常状態（WHERE+DM 構成・データ入力済み）" width={1440} height={940}>
+              <App form={form1} openSection="license" />
+            </DCArtboard>
+
+            <DCArtboard id="state-2" label="② 行ホバー時（削除 / ドラッグ / ＋挿入が可視化）" width={1440} height={940}>
+              <App form={form1}
+                   openSection="license"
+                   hoverRow="g-dm"
+                   hoverInsert="d-lic-2" />
+            </DCArtboard>
+
+            <DCArtboard id="state-3" label="③ 左サイドパネル「⑤ DM費用」セクション展開" width={1440} height={940}>
+              <App form={form1} openSection="dm" />
+            </DCArtboard>
+
+            <DCArtboard id="state-4" label="④ プレビューの項目名インライン編集中（テンプレ外れ表示）" width={1440} height={940}>
+              <App form={form4}
+                   openSection="customer"
+                   isEditing={true}
+                   editTarget="g-dm"
+                   deviated={true} />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="export" title="出力フロー" subtitle="PDF出力前のバリデーションモーダル（参考）">
+            <DCArtboard id="state-pdf" label="⑤ PDF出力モーダル（バリデーション）" width={1440} height={940}>
+              <App form={form1} openSection="license" showModal={true} />
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+
+        <TweaksPanel title="Tweaks">
+          <TweakSection title="件名プリセット">
+            <TweakRadio
+              label="件名"
+              value={tweaks.subjectPreset}
+              onChange={(v) => setTweak('subjectPreset', v)}
+              options={[
+                { value: 'where', label: 'WHERE単体' },
+                { value: 'where_dm', label: '+DM' },
+                { value: 'where_dm_call', label: '+DM+反響' },
+              ]}
+            />
+          </TweakSection>
+        </TweaksPanel>
+        </React.Fragment>
+      );
+    }
+
+    function Mount() {
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<Root />);
+    }
+
+    // Wait for components to register
+    if (window.WHERE_App && window.WHERE_Sidebar && window.WHERE_Preview) Mount();
+    else setTimeout(Mount, 50);
+  </script>
+</body>
+</html>
